@@ -1,11 +1,21 @@
 mod prop;
 mod var_iter;
 mod rules;
-use std::{collections::hash_map::*, hash::*};
+mod num_traits;
+mod juggler;
+
+use num::BigUint;
 use prop::*;
+use juggler::*;
+use num_traits::BitWiz;
 
 use crate::rules::apply_rules;
- 
+
+use std::{collections::hash_map::*, str::FromStr};
+
+
+use prop::Prop::*;
+
 // prop_tools.rs
 // TODO: these should be macros
 pub fn b(p: Prop) -> Box<Prop>{
@@ -52,18 +62,31 @@ const T: bool = true;
 const F: bool = false;
 
 fn main() {
-    let bp = |x: Prop|Box::<Prop>::new(x);
-    let a = Prop::Disj(vec![
-        var("a"),
-        atom(T),
-        var("c"),
-    ]);
-    let b = Prop::Disj(vec![
-        atom(T),
-        var("a"),
-        var("c"),
-    ]);
-    use Prop::*;
+    //println!("3u64<<62 = {:b}",3u64<<62);
+    // for d in Juggler::new(2, 4){
+    //     //Juggler::print_from_vec(&d,"d");
+    //     for i in d{
+    //         println!("i={i:?}");
+    //     }
+    //     println!("------");
+    // }
+    // let bp = |x: Prop|Box::<Prop>::new(x);
+    // let a = Prop::Conj(vec![
+    //        disj(var("K"),var("H")),
+    //        xor(var("R"),var("V")),
+    //        then(var("A"),var("R")),
+    //        biimpl(var("V"),var("K")),
+    //        then(var("H"),conj(var("A"),var("K")))
+    //     ]);
+    // for i in a.get_var_iter(){
+    //     println!("{a}");
+    // }
+    // let b = Prop::Disj(vec![
+    //     atom(T),
+    //     var("a"),
+    //     var("c"),
+    // ]);
+    // use Prop::*;
     let c = Not(
         Box::<Prop>::new(
             Conj(vec![
@@ -74,52 +97,62 @@ fn main() {
             ])
         )
     );
-    let c2 = Disj(vec![
-        Not(bp(var("p"))),
-        Not(bp(var("q"))),
-        Not(bp(var("r"))),
-        Not(bp(var("s"))),
-    ]);
-    let c3 = Disj(vec![
-        Not(bp(var("p"))),
-        Not(bp(var("q"))),
-        Not(bp(Conj(vec![
-            var("r"),
-            var("s")
-        ])))
-    ]);
-    let c4 = Disj(vec![
-        Not(bp(var("p"))),
-        Not(bp(Conj(vec![
-            var("q"),
-            var("r"),
-            var("s")
-        ])))
-    ]);
-    let c5 = Disj(vec![
-        Not(bp(var("p"))),
-        Not(bp(var("r"))),
-        Not(bp(Conj(vec![
-            var("q"),
-            var("s")
-        ])))
-    ]);
-    
+    // let c2 = Disj(vec![
+    //     Not(bp(var("p"))),
+    //     Not(bp(var("q"))),
+    //     Not(bp(var("r"))),
+    //     Not(bp(var("s"))),
+    // ]);
+    // let c3 = Disj(vec![
+    //     Not(bp(var("p"))),
+    //     Not(bp(var("q"))),
+    //     Not(bp(Conj(vec![
+    //         var("r"),
+    //         var("s")
+    //     ])))
+    // ]);
+    // let c4 = Disj(vec![
+    //     Not(bp(var("p"))),
+    //     Not(bp(Conj(vec![
+    //         var("q"),
+    //         var("r"),
+    //         var("s")
+    //     ])))
+    // ]);
+    // let c5 = Disj(vec![
+    //     Not(bp(var("p"))),
+    //     Not(bp(var("r"))),
+    //     Not(bp(Conj(vec![
+    //         var("q"),
+    //         var("s")
+    //     ])))
+    // ]);
+    // 
 
     println!("before = {c}");
     let res =apply_rules(&c, &vec![], DefaultHasher::default()); 
     for (x, _, _) in res{
-        println!("applied rules = {x}");
+        println!("applied rules = {x}; eq = {}", x.is_logically_eq(&c).unwrap());
     }
-    println!("c≡c2 = {:?}",c.is_logically_eq(&c2).unwrap());
-    println!("c≡c3 = {:?}",c.is_logically_eq(&c3).unwrap());
-    println!("c2≡c3 = {:?}",c2.is_logically_eq(&c3).unwrap());
-    println!("c2≡c4 = {:?}",c2.is_logically_eq(&c4).unwrap());
-    println!("c≡c5 = {:?}",c.is_logically_eq(&c5).unwrap());
-    println!("c={c}");
-    println!("c2={c2}");
-    println!("c3={c3}");
-    println!("c4={c4}");
-    println!("c5={c5}");
+    // println!("evaluating a, where a = {a}");
+    // for (n,i) in a.get_var_iter().enumerate(){
+    //     println!("\t{n}. swapped = {}",a.swap(&i));
+    //     println!("\tevaluation = {}",a.swap(&i).evaluate().unwrap());
+    // }
+    // println!("c≡c2 = {:?}",c.is_logically_eq(&c2).unwrap());
+    // println!("c≡c3 = {:?}",c.is_logically_eq(&c3).unwrap());
+    // println!("c2≡c3 = {:?}",c2.is_logically_eq(&c3).unwrap());
+    // println!("c2≡c4 = {:?}",c2.is_logically_eq(&c4).unwrap());
+    // println!("c≡c5 = {:?}",c.is_logically_eq(&c5).unwrap());
+    // println!("c={c}");
+    // println!("c2={c2}");
+    // println!("c3={c3}");
+    // println!("c4={c4}");
+    // println!("c5={c5}");
+    // println!("BIZ WIZ TIME------------");
+    // println!("1024u64 => {}",1024u64.sum_bits());
+    // println!("1023u64 => {}",1023u64.sum_bits());
+    // let x: u64 = 1u64.into();
+    // let x: u64 = 1u8.into();
 }
 

@@ -203,9 +203,35 @@ impl Prop{
         
     }
 
-
+    pub fn is_valid(&self) -> Result<bool, String>{
+        for i in self.get_var_iter(){
+            if self.swap(&i).evaluate()? == false{
+                return Ok(false)
+            }
+        }
+        Ok(true)
+    }
+    pub fn is_satisfiable(&self) -> Result<bool, String>{
+        for i in self.get_var_iter(){
+            if self.swap(&i).evaluate()? == true{
+                return Ok(true)
+            }
+        }
+        Ok(false)
+    }
+    pub fn is_contradictory(&self) -> Result<bool, String>{
+        for i in self.get_var_iter(){
+            if self.swap(&i).evaluate()? == true{
+                return Ok(false)
+            }
+        }
+        Ok(true)
+    }
+    pub fn is_contingent(&self) -> Result<bool, String>{
+        Ok(!(self.is_contradictory()?||self.is_valid()?))
+    }
 }
-
+// TODO: find difference between .iter() and .into_iter()
 impl Hash for Prop {
     fn hash<H: Hasher>(&self, state: &mut H) {
         use Prop::*;
@@ -268,11 +294,11 @@ impl fmt::Display for Prop{
         fn impl_box_pv_d(pv: Vec<Prop>, delimiter: &str) -> String{
             let mut s = String::new();
             for (i,p) in (&pv).into_iter().enumerate(){
-                if p2v(p.clone()) > d2v(delimiter){
+                if p2v(p.clone()) >= d2v(delimiter){
                     s.push('(');
                 }
                 s.push_str(impl_p(p.clone()).as_str());
-                if p2v(p.clone()) > d2v(delimiter){
+                if p2v(p.clone()) >= d2v(delimiter){
                     s.push(')');
                 }
                 if i+1 != pv.len(){

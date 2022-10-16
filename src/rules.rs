@@ -1,4 +1,5 @@
 use crate::prop::*;
+use crate::juggler::*;
 use std::{hash::{Hash,Hasher}, ops::Deref};
 fn b(p: Prop) -> Box<Prop>{
     Box::<Prop>::new(p)
@@ -40,21 +41,53 @@ pub fn apply_rules<H>(target: &Prop, hashes: &Vec<u64>, hasher: H)
                 // ¬(p∧q∧r∧s)
                 Conj(l) => {
                     // assumption: l.len() > 1
+                    let mut all: Vec<(Prop, &str)> = vec![];
+                    
                     let mut new: Vec<Prop> = vec![];
                     // all => ¬p∨¬q∨¬r∨¬s
                     for p in l{
                         new.push(Not(b(p.clone())))
                     }
+                    
+                    all.push((Disj(new), "de morgan's law"));
+
                     // 2..all-1 => ¬p∨¬q∨¬(r∧s) ... ¬p∨¬(q∧r∧s)
-                    let mut buffer: Vec<usize> = vec![0];
                     for i in 2..l.len(){
-                        while buffer.len() > i{
-                            for j in (buffer[buffer.len()-1]+1)..l.len()-buffer.len(){
-                                todo!();
+                        let j = Juggler::new(i as u64, l.len() as u64);
+                        let mut buffer_disj: Vec<Prop> = vec![];
+                        let mut buffer_conj: Vec<Prop> = vec![];
+                        for state in j{
+                            buffer_disj.clear();
+                            buffer_conj.clear();
+                            let mut k = 0;
+                            for x in state{
+                                if x{
+                                    buffer_conj.push(l[k].clone());
+                                } else {
+                                    buffer_disj.push(Not(b(l[k].clone())));
+                                }
+                                k += 1;
                             }
+                            all.push(
+                                (Disj
+                                    ([vec![
+                                        Not(
+                                            b(
+                                                Conj(
+                                                    buffer_conj.clone()
+                                                )
+                                            )
+                                        )],
+                                    buffer_disj.clone()
+                                    ].concat()), 
+                                "de morgan's law")
+                            );
                         }
                     }
-                    push_if_new(Disj(new),"de morgan's law"); 
+                    for (p, s) in all{
+                        push_if_new(p, s);
+                    }
+                    //push_if_new(Disj(new),"de morgan's law"); 
                 }
                 _ => ()
             };
