@@ -99,8 +99,7 @@ pub fn apply_rules<H>(target: &Prop, hashes: &Vec<u64>, hasher: H)
         Biimpl(x) => (),
         LogEqu(x) => (),
         
-        Then(xy) => (),
-        Cause(xy) => (),
+        Impl(xy) => (),
         
         _ => (),
     }

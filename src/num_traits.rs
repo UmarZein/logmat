@@ -1,4 +1,3 @@
-use num::*;
 use std::ops::*;
 pub trait BitWiz{
     fn sum_bits(&self) -> u64;

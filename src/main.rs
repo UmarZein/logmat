@@ -4,7 +4,6 @@ mod rules;
 mod num_traits;
 mod juggler;
 
-use num::BigUint;
 use prop::*;
 use juggler::*;
 use num_traits::BitWiz;
@@ -49,10 +48,7 @@ pub fn biimpl(bp1: Prop, bp2: Prop)->Prop{
 }
 
 pub fn then(bp1: Prop, bp2: Prop)->Prop{
-    Prop::Then([b(bp1),b(bp2)])
-}
-pub fn cause(bp1: Prop, bp2: Prop)->Prop{
-    Prop::Cause([b(bp1),b(bp2)])
+    Prop::Impl([b(bp1),b(bp2)])
 }
 
 
@@ -149,10 +145,5 @@ fn main() {
     // println!("c3={c3}");
     // println!("c4={c4}");
     // println!("c5={c5}");
-    // println!("BIZ WIZ TIME------------");
-    // println!("1024u64 => {}",1024u64.sum_bits());
-    // println!("1023u64 => {}",1023u64.sum_bits());
-    // let x: u64 = 1u64.into();
-    // let x: u64 = 1u8.into();
 }
 

@@ -13,8 +13,7 @@ pub enum PropUntitled{
     Biimpl,
     Xor,
     LogEqu,
-    Then,
-    Cause
+    Impl,
 }
 #[derive(Debug,Clone,PartialEq,Eq,PartialOrd, Ord)]
 pub enum Prop{
@@ -30,8 +29,7 @@ pub enum Prop{
     Xor(Vec<Prop>),
     LogEqu(Vec<Prop>),
     
-    Then([Box<Prop>;2]),
-    Cause([Box<Prop>;2]),
+    Impl([Box<Prop>;2]),
 }
 
 impl Prop{
@@ -103,17 +101,9 @@ impl Prop{
             },
             LogEqu(_) => Err(String::from("can not evaluate logical equivalence operator")),
             
-            Then([x, y]) => {
+            Impl([x, y]) => {
                 if x.evaluate()? == true{
                     if y.evaluate()? == false{
-                        return Ok(false)
-                    }
-                }
-                Ok(true)
-            },
-            Cause([x, y]) => {
-                if y.evaluate()? == true{
-                    if x.evaluate()? == false{
                         return Ok(false)
                     }
                 }
@@ -137,8 +127,7 @@ impl Prop{
             Biimpl(x) => for i in x{res = [res, i.get_vars()].concat()},
             LogEqu(x) => for i in x{res = [res, i.get_vars()].concat()},
             
-            Then(xy) => for i in xy{res = [res, i.get_vars()].concat()},
-            Cause(xy) => for i in xy{res = [res, i.get_vars()].concat()},
+            Impl(xy) => for i in xy{res = [res, i.get_vars()].concat()},
             
             _ => (),
         };
@@ -197,8 +186,7 @@ impl Prop{
                     }
                 x2}),
             
-            Then([x, y]) => Then([Box::<Prop>::new(x.swap(v)),Box::<Prop>::new(y.swap(v))]),
-            Cause([x, y]) => Cause([Box::<Prop>::new(x.swap(v)),Box::<Prop>::new(y.swap(v))]),
+            Impl([x, y]) => Impl([Box::<Prop>::new(x.swap(v)),Box::<Prop>::new(y.swap(v))]),
         }
         
     }
@@ -249,8 +237,7 @@ impl Hash for Prop {
             Xor(vp) => {PU::Xor.hash(state);let mut vpc = (*vp).clone();vpc.sort();vpc.hash(state)},
             LogEqu(vp) => {PU::LogEqu.hash(state);let mut vpc = (*vp).clone();vpc.sort();vpc.hash(state)},
             
-            Then(bp2) => {PU::Then.hash(state);(*bp2).hash(state)},
-            Cause(bp2) => {PU::Cause.hash(state);(*bp2).hash(state)},
+            Impl(bp2) => {PU::Impl.hash(state);(*bp2).hash(state)},
         }
     }
 }
@@ -268,9 +255,8 @@ impl fmt::Display for Prop{
                 "∨" => 3,
                 "⊕" => 4,
                 "→" => 5,
-                "←" => 6,
-                "↔" => 7,
-                "≡" => 8,
+                "↔" => 6,
+                "≡" => 7,
                 _ => u8::MAX
             }
         }
@@ -284,8 +270,7 @@ impl fmt::Display for Prop{
                 Conj  (_) => 2,
                 Disj  (_) => 3,
                 Xor   (_) => 4,
-                Then  (_) => 5,
-                Cause (_) => 6,
+                Impl  (_) => 5,
                 Biimpl(_) => 7,
                 LogEqu(_) => 8,
                 _ => u8::MAX,
@@ -329,8 +314,7 @@ impl fmt::Display for Prop{
                 Biimpl(pv) => impl_box_pv_d(pv, "↔"),
                 LogEqu(pv) => impl_box_pv_d(pv, "≡"),
                 
-                Then  ([p1, p2]) => impl_box_pv_d(vec![*p1, *p2], "→"),
-                Cause ([p1, p2]) => impl_box_pv_d(vec![*p1, *p2], "←"),
+                Impl  ([p1, p2]) => impl_box_pv_d(vec![*p1, *p2], "→"),
                 // _ => String::from("_")
             }
         }
