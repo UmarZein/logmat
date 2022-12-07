@@ -1,10 +1,10 @@
-mod prop;
-mod var_iter;
-mod qol_macros;
-mod rules;
-mod parser;
-mod juggler;
-mod num_traits;
+pub(crate) mod prop;
+pub(crate) mod var_iter;
+pub(crate) mod qol_macros;
+pub(crate) mod rules;
+pub(crate) mod parser;
+pub(crate) mod juggler;
+pub(crate) mod num_traits;
 use num_traits::*;
 use prop::*;
 use qol_macros::*;
