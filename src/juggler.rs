@@ -1,5 +1,26 @@
 use crate::num_traits::*;
 
+/// useful for going through all the different 
+/// permutation of bits, given a length and n
+/// where n is the number of 1-bit of a state
+///
+/// # example:
+///
+/// ```
+/// let j = Juggler::new(2, 4);
+/// for i in j{
+///     Juggler::print_from_vec(&i.state(), "state") 
+/// }
+/// ```
+///
+/// prints something like 
+///
+/// 1100 
+/// 1010 
+/// 1001 
+/// 0110 
+/// 0101 
+/// 0011
 #[derive(Clone, Debug)]
 pub struct Juggler{
     n: u64,
@@ -7,22 +28,19 @@ pub struct Juggler{
     state: Vec<u64>,
 }
 
+
 impl Juggler{
     fn get_state(n: u64, size: u64) -> Vec<u64>{
         let size = size + 1;
         let n_vecs: usize = (n/64) as usize;
-        // println!("n_vecs = {n_vecs}");
         let mut res: Vec<u64> = vec![];
         res = [res,vec![u64::MAX;n_vecs]].concat();
         if (n%64)!=0{
             let right_nullifier = u64::MAX>>(n%64);
-            // println!("right nullifier = {:b}", right_nullifier);
             let last: u64 = u64::MAX-right_nullifier;
-            // println!("last = {last:b}");
             res.push(last);
         }
         let more_n_vecs = (size/64-n/64) as usize;
-        // println!("size = {size}, more_n_nvecs = {more_n_vecs}");
         res = [res, vec![0; more_n_vecs]].concat();
         let l = res.len();
         res[l-1] |= 1;
@@ -32,6 +50,7 @@ impl Juggler{
     pub fn new(n: u64, size: u64) -> Self{
         Self{n, size, state: Self::get_state(n, size)}
     }
+    /// padding refers to the leftover bits of the juggler state
     pub fn padding(&self) -> i32{
         return 64-(self.n%64u64) as i32
     }
@@ -137,7 +156,7 @@ impl Iterator for Juggler{
         None
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct JugglerState{
     state: Vec<u64>,
     size: u64,
@@ -147,6 +166,9 @@ pub struct JugglerState{
 impl JugglerState{
     pub fn new(state: &Vec<u64>, size: u64) -> Self{
         JugglerState { state: state.clone(), size, rindex: 0}
+    }
+    pub fn state(&self) -> Vec<u64>{
+        self.state.clone()
     }
 }
 

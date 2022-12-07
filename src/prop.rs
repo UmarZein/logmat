@@ -1,3 +1,4 @@
+//! Propositional types
 use crate::qol_macros::*;
 use crate::var_iter::*;
 
@@ -8,10 +9,9 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
 };
-// look, these words have cool colors wooo~ -> BUG TODO FIXME NOTE HACK WARNING
-// prop.rs
+/// PropType
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
-pub enum PropUntitled {
+pub enum PropType {
     Atom,
     Var,
     Scope,
@@ -24,9 +24,9 @@ pub enum PropUntitled {
     Impl,
 }
 
-impl PropUntitled{
+impl PropType{
     pub fn is_nonassociative_operator(&self) -> bool{
-        use PropUntitled::*;
+        use PropType::*;
         match self {
             Not => true,
             Impl => true,
@@ -34,7 +34,7 @@ impl PropUntitled{
         }
     }
     pub fn is_associative_operator(&self) -> bool{
-        use PropUntitled::*;
+        use PropType::*;
         match self{
             Conj => true,
             Disj => true,
@@ -46,7 +46,7 @@ impl PropUntitled{
     }
     /// returns none for non operators (atoms, vars, etc.)
     pub fn symbol(&self) -> Option<char>{
-        use PropUntitled::*;
+        use PropType::*;
         // pqrs¬∧∨⊕→≡↔
         match self{
             Not => Some('¬'),
@@ -62,11 +62,11 @@ impl PropUntitled{
     pub fn associative_wrapper(&self, f: Vec<Prop>) -> Option<Prop>{
         use Prop::*;
         match self{
-            PropUntitled::Conj => Some(Conj(f)),
-            PropUntitled::Disj => Some(Disj(f)),
-            PropUntitled::Biimpl => Some(Biimpl(f)),
-            PropUntitled::Xor => Some(Xor(f)),
-            //PropUntitled::LogEqu => Some(LogEqu(f)),
+            PropType::Conj => Some(Conj(f)),
+            PropType::Disj => Some(Disj(f)),
+            PropType::Biimpl => Some(Biimpl(f)),
+            PropType::Xor => Some(Xor(f)),
+            //PropType::LogEqu => Some(LogEqu(f)),
             _ => None
         }
     }
@@ -378,19 +378,61 @@ impl Prop {
     pub fn is_contingent(&self) -> Result<bool, String> {
         Ok(!(self.is_contradictory()? || self.is_valid()?))
     }
+    
+    /// returns truth table
+    pub fn truth_table(&self) -> String{
+        let mut res = String::new();
+
+        let vars = self.get_vars();
+        let cols: Vec<String> = [vars.clone(), vec!["*".to_string()]].concat();
+        let v_edge: String = ["+".to_string(), "---+".repeat(cols.len())].concat();
+        let mut v_sep: String = ["|".to_string(), "---+".repeat(cols.len())].concat();
+        v_sep = v_sep[..v_sep.len() - 1].to_string();
+        v_sep.push('|');
+        let header: String = [
+            "|".to_string(),
+            cols.iter()
+                .map(|x| [" ".to_string(), x.clone(), " |".to_string()].concat())
+                .collect(),
+        ]
+        .concat();
+        res += &format!("{v_edge}\n");
+        res += &format!("{header}\n");
+        for hm in self.get_var_iter() {
+            res += &format!("{v_sep}\n");
+            let mut interpretation: Vec<bool> = vec![];
+            for i in &vars {
+                interpretation.push(*hm.get(&i.clone()).unwrap());
+            }
+            interpretation.push(self.swap(&hm).evaluate().unwrap());
+            let translate_bool = |x| -> String {
+                if x {
+                    return "T".to_string();
+                }
+                "F".to_string()
+            };
+            let header: String = [
+                "|".to_string(),
+                interpretation
+                    .iter()
+                    .map(|x| {
+                        [
+                            " ".to_string(),
+                            translate_bool(*x).clone(),
+                            " |".to_string(),
+                        ]
+                        .concat()
+                    })
+                    .collect(),
+            ]
+            .concat();
+            res += &format!("{header}\n");
+        }
+        res += &format!("{v_edge}");
+        res
+    }
 
     pub fn print_truth_table(&self) {
-        // +---+---+---+
-        // | p | q | * |
-        // |---+---+---|
-        // | T | T | T |
-        // |---+---+---|
-        // | T | F | F |
-        // |---+---+---|
-        // | F | T | T |
-        // |---+---+---|
-        // | F | F | T |
-        // +---+---+---+
         let vars = self.get_vars();
         let cols: Vec<String> = [vars.clone(), vec!["*".to_string()]].concat();
         let v_edge: String = ["+".to_string(), "---+".repeat(cols.len())].concat();
@@ -439,11 +481,11 @@ impl Prop {
         println!("{v_edge}");
     }
 }
-// TODO: find difference between .iter() and .into_iter()
+
 impl Hash for Prop {
     fn hash<H: Hasher>(&self, state: &mut H) {
         use Prop::*;
-        use PropUntitled as PU;
+        use PropType as PU;
         match self {
             Atom(b) => {
                 PU::Atom.hash(state);

@@ -19,28 +19,17 @@ pub fn all_simplifications(target: &Prop) -> Vec<Prop> {
     res.insert(target.clone(), false);
     let mut done = false;
     while !done{
-        // println!("{}","-".repeat(1000));
         done = true;
         let mut res_keys: Vec<Prop> = res.keys().map(|x|x.clone()).collect();
         res_keys.sort_by(|a,b|a.complexity().cmp(&b.complexity())/*.reverse()*/);
-        //println!("res_keys = {:?}",res_keys.iter().map(|x|x.complexity()).collect::<Vec<u64>>());
         for p_done in res_keys{
             if res.get(&p_done).unwrap()==&false{
-                // println!("{p_done} -> {}",p_done.complexity());
                 for (p, s) in apply_rules_raw(&p_done.clone()){
                     if !res.contains_key(&p){
                         res.insert(p.clone(), false);
                         if p.complexity() <= 2{break}
                         let len = res.len();
-                        // println!("before: {p_done}");
-                        // println!("{p}");
-                        // println!("reason = {s}");
                         done = false;
-                        // println!("res[{}] = {{",len);
-                        // for i in res.keys(){
-                        //     println!("\t{i},")
-                        // }
-                        // println!("}}")
                     }
                 }
                 *res.get_mut(&p_done).unwrap()=true;

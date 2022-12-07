@@ -11,8 +11,8 @@ pub enum ParseErr {
     Unimplimented(String),
 }
 
-pub fn translate_operator(s: char) -> Result<PropUntitled, ParseErr> {
-    use PropUntitled::*;
+pub fn translate_operator(s: char) -> Result<PropType, ParseErr> {
+    use PropType::*;
     match s {
         // pqrs¬∧∨⊕→≡↔
         '¬' => Ok(Not),
@@ -27,8 +27,8 @@ pub fn translate_operator(s: char) -> Result<PropUntitled, ParseErr> {
     }
 }
 
-pub fn rank(pu: &PropUntitled) -> u32 {
-    use PropUntitled::*;
+pub fn rank(pu: &PropType) -> u32 {
+    use PropType::*;
     match pu {
         Atom => 0,
         Not => 1,
@@ -41,8 +41,8 @@ pub fn rank(pu: &PropUntitled) -> u32 {
     }
 }
 
-pub fn highest_order(vc: &Vec<char>) -> Result<PropUntitled, ParseErr> {
-    use PropUntitled::*;
+pub fn highest_order(vc: &Vec<char>) -> Result<PropType, ParseErr> {
+    use PropType::*;
     if vc.len() == 0 {
         return Err(ParseErr::EmptyString);
     }
@@ -128,7 +128,7 @@ pub fn first_layer_find(text: &str, discriminator: char) -> Result<Vec<usize>, P
 /// returns (position, length)
 pub fn pinpoint_associative_operators(
     text: &str,
-    prop: &PropUntitled,
+    prop: &PropType,
 ) -> Result<Vec<usize>, ParseErr> {
     let mut ret: Vec<usize> = vec![];
     let mut layer = 0i32;
@@ -210,12 +210,8 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
 
     let chars: Vec<char> = text.chars().collect();
     let highest_rank = highest_order(&chars)?;
-    dbg!(text.clone());
-    dbg!("ey");
-    // println!("{text}");
-    println!("highest_rank = {highest_rank:?}");
     match &highest_rank {
-        PropUntitled::Not => {
+        PropType::Not => {
             let tmp = first_layer_find(&text, '¬')?[0];
             let bytes = text.chars()
                             .take(tmp)
@@ -223,18 +219,17 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
                             .sum();
             let (_, right) = text.split_at(bytes);
             let right = right.split('¬').last().ok_or(ParseErr::Unknown)?;
-            return Ok(n!(parse(dbg!(right))?));
+            return Ok(n!(parse(right)?));
         }
-        PropUntitled::Impl => {
+        PropType::Impl => {
             let tmp = first_layer_find(&text, '→')?[0];
             let bytes = text.chars()
                             .take(tmp)
                             .map(|x: char|x.len_utf8())
                             .sum();
             let (left, right) = text.split_at(bytes);
-            dbg!(&(left, right));
             let right = right.split('→').last().ok_or(ParseErr::Unknown)?;
-            return Ok(imply!(parse(dbg!(left))?, parse(dbg!(right))?));
+            return Ok(imply!(parse(left)?, parse(right)?));
         }
         _ => {
             let mut children: Vec<Prop> = vec![];
@@ -251,15 +246,14 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
             for i in 0..splitted.len(){
                 let part: Vec<char>;
                 if i == 0{
-                    part = dbg!(chars[0..splitted[i]].to_vec())
+                    part = chars[0..splitted[i]].to_vec()
                 } else {
-                    part = dbg!(chars[splitted[i-1]+1..splitted[i]].to_vec())
+                    part = chars[splitted[i-1]+1..splitted[i]].to_vec()
                 }
                 children.push(parse(&part.iter().collect::<String>())?);
             } 
-            let part = dbg!(chars[splitted.last().unwrap()+1..].to_vec());
+            let part = chars[splitted.last().unwrap()+1..].to_vec();
             children.push(parse(&part.iter().collect::<String>())?);
-            //dbg!(buffer.0.clone());
             
             Ok(highest_rank.associative_wrapper(children).ok_or(ParseErr::Unknown)? )
         }
