@@ -1,0 +1,26 @@
+-(a^b)^(b|-c)
+(a^b^1)^(b^-c^(b&-c))
+(a^b^1)^(b^1^c^(b&-c))
+a^b^1^b^1^c^(b&-c)
+a^c^(b&-c)
+
+
+(-p|q)|(p&q&r)
+    (-p|(p&q&r))|(q|(p&q&r))
+        (-p|(p&q&r))|q
+        hard to simplify
+
+
+
+.
+-(a^b)^(b|-c)
+(a^b^T)^(b^-c^(b&-c))
+
+
+-p|(-q|r)
+(p&-q)|(-p|r)
+-(-p|q)|(-p|r)
+-p
+
+p|(p&q) = p
+

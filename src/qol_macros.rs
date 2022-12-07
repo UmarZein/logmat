@@ -60,14 +60,14 @@ macro_rules! logequ {
     ($( $child: expr ),*) => {{
         let mut children: Vec<Prop> = vec![];
         $( children.push($child); )*
-        LogEqu(children)
+        Prop::LogEqu(children)
     }};
 }
 
 #[macro_export]
 macro_rules! imply {
     ($cause: expr, $effect: expr) => {
-        Impl([Box::<Prop>::new($cause), Box::<Prop>::new($effect)])
+        Prop::Impl([Box::<Prop>::new($cause), Box::<Prop>::new($effect)])
     };
 }
 #[allow(unused_imports)]

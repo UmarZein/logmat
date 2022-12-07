@@ -1,5 +1,5 @@
-use crate::var_iter::*;
 use crate::qol_macros::*;
+use crate::var_iter::*;
 
 use std::ops::Deref;
 use std::{
@@ -10,7 +10,7 @@ use std::{
 };
 // look, these words have cool colors wooo~ -> BUG TODO FIXME NOTE HACK WARNING
 // prop.rs
-#[derive(PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum PropUntitled {
     Atom,
     Var,
@@ -24,11 +24,59 @@ pub enum PropUntitled {
     Impl,
 }
 
-/// Proposition types. 
+impl PropUntitled{
+    pub fn is_nonassociative_operator(&self) -> bool{
+        use PropUntitled::*;
+        match self {
+            Not => true,
+            Impl => true,
+            _ => false,
+        }
+    }
+    pub fn is_associative_operator(&self) -> bool{
+        use PropUntitled::*;
+        match self{
+            Conj => true,
+            Disj => true,
+            Biimpl => true,
+            Xor => true,
+            LogEqu => true,
+            _ => false
+        }
+    }
+    /// returns none for non operators (atoms, vars, etc.)
+    pub fn symbol(&self) -> Option<char>{
+        use PropUntitled::*;
+        // pqrs¬∧∨⊕→≡↔
+        match self{
+            Not => Some('¬'),
+            Impl => Some('→'),
+            Conj => Some('∧'),
+            Disj => Some('∨'),
+            Biimpl => Some('↔'),
+            Xor => Some('⊕'),
+            _ => None
+        }
+    }
+
+    pub fn associative_wrapper(&self, f: Vec<Prop>) -> Option<Prop>{
+        use Prop::*;
+        match self{
+            PropUntitled::Conj => Some(Conj(f)),
+            PropUntitled::Disj => Some(Disj(f)),
+            PropUntitled::Biimpl => Some(Biimpl(f)),
+            PropUntitled::Xor => Some(Xor(f)),
+            //PropUntitled::LogEqu => Some(LogEqu(f)),
+            _ => None
+        }
+    }
+}
+
+/// Proposition types.
 /// Caveats:
-///     - XOR has multiple input. if it contains odd number of true, 
-///       it evaluates into true. this is different from the other 
-///       interpretation of XOR as "one and only one true". this is 
+///     - XOR has multiple input. if it contains odd number of true,
+///       it evaluates into true. this is different from the other
+///       interpretation of XOR as "one and only one true". this is
 ///       because XOR(a,b,c) is interpreted as (a⊕b)⊕c
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Prop {
@@ -49,30 +97,30 @@ pub enum Prop {
 // biimpl = p|-q&-p|q
 // xor    = p&-q|-p&q
 //
-// -p&-q&n = CONJ(NOT(p),NOT(q),n...) = 2+len(n)+6+n.iter.compl.sum = 8 + len(n) + #n 
+// -p&-q&n = CONJ(NOT(p),NOT(q),n...) = 2+len(n)+6+n.iter.compl.sum = 8 + len(n) + #n
 // -(p|q|n...) = NOT(DISJ(p,q,n)) = 1 + 2 * (2+len(n) + 2 + n.iter.compl.sum) = 9+2*(len(n) + #n)
 //
 //
 impl Prop {
-    pub fn complexity(&self) -> u64{
+    pub fn complexity(&self) -> u64 {
         use Prop::*;
         match self {
             Atom(_) => 0,
             Var(_) => 1,
             Scope(bp) => bp.complexity(),
-            Not(bp) => 1+2*bp.complexity(),
-            Conj(vp) => vp.len() as u64 + vp.iter().map(|p|p.complexity()).sum::<u64>(),
-            Disj(vp) => vp.len() as u64 + vp.iter().map(|p|p.complexity()).sum::<u64>(),
-            
-            Biimpl(vp) => vp.len() as u64 + (vp.iter().map(|p|p.complexity()).sum::<u64>())*2,
-            Xor(vp) => vp.len() as u64 + vp.iter().map(|p|p.complexity()).sum::<u64>()*2,
+            Not(bp) => 1 + 2 * bp.complexity(),
+            Conj(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>(),
+            Disj(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>(),
 
-            LogEqu(vp) => 1+2*vp.iter().map(|p|p.complexity()).sum::<u64>(),
+            Biimpl(vp) => vp.len() as u64 + (vp.iter().map(|p| p.complexity()).sum::<u64>()) * 2,
+            Xor(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>() * 2,
+
+            LogEqu(vp) => 1 + 2 * vp.iter().map(|p| p.complexity()).sum::<u64>(),
 
             Impl(bp2) => {
-                let x=bp2[0].clone();
-                let y=bp2[1].clone();
-                1+disj!(n!(x.deref().clone()),y.deref().clone()).complexity()
+                let x = bp2[0].clone();
+                let y = bp2[1].clone();
+                1 + disj!(n!(x.deref().clone()), y.deref().clone()).complexity()
             }
         }
     }
@@ -97,11 +145,10 @@ impl Prop {
     /// errors:
     ///     Prop.swap(_) error
     pub fn is_logically_eq(&self, other: &Prop) -> Result<bool, String> {
-        
         let mut v = self.get_vars();
         let v_ = v.clone();
-        for i in other.get_vars(){
-            if !v_.contains(&i){
+        for i in other.get_vars() {
+            if !v_.contains(&i) {
                 v.push(i);
             }
         }
@@ -119,12 +166,12 @@ impl Prop {
         }
         return Ok(true);
     }
-    
+
     pub fn is_logically_opp(&self, other: &Prop) -> Result<bool, String> {
         let mut v = self.get_vars();
         let v_ = v.clone();
-        for i in other.get_vars(){
-            if !v_.contains(&i){
+        for i in other.get_vars() {
+            if !v_.contains(&i) {
                 v.push(i);
             }
         }
@@ -369,7 +416,8 @@ impl Prop {
             let translate_bool = |x| -> String {
                 if x {
                     return "T".to_string();
-                } "F".to_string()
+                }
+                "F".to_string()
             };
             let header: String = [
                 "|".to_string(),
@@ -416,34 +464,64 @@ impl Hash for Prop {
             }
 
             Conj(vp) => {
-                PU::Conj.hash(state);
-                let mut vpc = (*vp).clone();
-                vpc.sort();
-                vpc.hash(state)
+                let tmp = DefaultHasher::new();
+                let vpc = (*vp).clone();
+                let mut children_hash: u64 = 0;
+                vpc.iter().for_each(|x| {
+                    let mut tmp = tmp.clone();
+                    x.hash(&mut tmp);
+                    children_hash ^= tmp.finish()
+                });
+                children_hash.hash(state);
+                PU::Conj.hash(state)
             }
             Disj(vp) => {
-                PU::Disj.hash(state);
-                let mut vpc = (*vp).clone();
-                vpc.sort();
-                vpc.hash(state)
+                let tmp = DefaultHasher::new();
+                let vpc = (*vp).clone();
+                let mut children_hash: u64 = 0;
+                vpc.iter().for_each(|x| {
+                    let mut tmp = tmp.clone();
+                    x.hash(&mut tmp);
+                    children_hash ^= tmp.finish()
+                });
+                children_hash.hash(state);
+                PU::Disj.hash(state)
             }
             Biimpl(vp) => {
-                PU::Biimpl.hash(state);
-                let mut vpc = (*vp).clone();
-                vpc.sort();
-                vpc.hash(state)
+                let tmp = DefaultHasher::new();
+                let vpc = (*vp).clone();
+                let mut children_hash: u64 = 0;
+                vpc.iter().for_each(|x| {
+                    let mut tmp = tmp.clone();
+                    x.hash(&mut tmp);
+                    children_hash ^= tmp.finish()
+                });
+                children_hash.hash(state);
+                PU::Biimpl.hash(state)
             }
             Xor(vp) => {
+                let tmp = DefaultHasher::new();
+                let vpc = (*vp).clone();
+                let mut children_hash: u64 = 0;
+                vpc.iter().for_each(|x| {
+                    let mut tmp = tmp.clone();
+                    x.hash(&mut tmp);
+                    children_hash ^= tmp.finish()
+                });
+                children_hash.hash(state);
                 PU::Xor.hash(state);
-                let mut vpc = (*vp).clone();
-                vpc.sort();
-                vpc.hash(state)
             }
             LogEqu(vp) => {
+                let tmp = DefaultHasher::new();
+                let vpc = (*vp).clone();
+                let mut children_hash: u64 = 0;
+                vpc.iter().for_each(|x| {
+                    let mut tmp = tmp.clone();
+                    x.hash(&mut tmp);
+                    children_hash ^= tmp.finish()
+                });
+                children_hash.hash(state);
                 PU::LogEqu.hash(state);
-                let mut vpc = (*vp).clone();
-                vpc.sort();
-                vpc.hash(state)
             }
 
             Impl(bp2) => {
