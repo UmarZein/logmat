@@ -6,6 +6,7 @@ pub enum ParseErr {
     Unknown,
     EmptyString,
     TokenNotFound,
+    InvalidToken,
     UnpairedBraces,
     TypeError,
     Unimplimented(String),
@@ -197,6 +198,15 @@ pub fn unwrap_parens(text: &str) -> Result<String, String> {
 }
 
 pub fn parse(text: &str) -> Result<Prop, ParseErr> {
+    let mut text = replace(text);
+
+    loop {
+        match unwrap_parens(&text) {
+            Ok(x) => text = x,
+            Err(_) => break,
+        };
+    }
+
     if text.trim() == "T"{
         return Ok(Prop::Atom(true))
     }
@@ -212,17 +222,11 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
     if text.is_empty(){
         return Err(ParseErr::EmptyString)
     }
-    if text.chars().all(|x: char| x.is_alphabetic()) {
+    if text.chars().all(|x: char| x.is_numeric()){
+        return Err(ParseErr::InvalidToken)
+    } 
+    if text.chars().all(|x: char| x.is_alphanumeric()) {
         return Ok(Prop::Var(text.to_string()));
-    }
-
-    let mut text = replace(text);
-
-    loop {
-        match unwrap_parens(&text) {
-            Ok(x) => text = x,
-            Err(_) => break,
-        };
     }
 
     let chars: Vec<char> = text.chars().collect();
@@ -234,12 +238,8 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
                             .take(tmp)
                             .map(|x: char|x.len_utf8())
                             .sum();
-            let (left, right) = text.split_at(bytes);
-            dbg!(&text);
-            dbg!(&highest_rank);
-            dbg!(&left);
+            let (_, right) = text.split_at(bytes);
             let right = right.split_at('¬'.len_utf8()).1;//.last().ok_or(ParseErr::Unknown)?;
-            dbg!(&right);
             return Ok(n!(parse(right)?));
         }
         PropType::Impl => {
@@ -254,8 +254,6 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
         }
         _ => {
             let mut children: Vec<Prop> = vec![];
-            dbg!(&text);
-            dbg!(&highest_rank);
             let splitted: Vec<usize> = pinpoint_associative_operators(&text, &highest_rank)?;
             if splitted.len()==0{
                 return Err(ParseErr::TokenNotFound)
