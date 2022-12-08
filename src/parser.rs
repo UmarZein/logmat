@@ -63,7 +63,7 @@ pub fn highest_order(vc: &Vec<char>) -> Result<PropType, ParseErr> {
         if scope_depth != 0 {
             continue;
         }
-        if c.is_alphabetic() {
+        if c.is_alphanumeric() {
             continue;
         }
         let op = translate_operator(c)?;
@@ -159,11 +159,16 @@ pub fn pinpoint_associative_operators(
 pub fn replace(text: &str) -> String {
     // pqrs¬∧∨⊕→≡↔
     let text = text.replace("<->", "↔");
+    let text = text.replace("!=", "⊕");
     let text = text.replace("->", "→");
+    let text = text.replace("==", "↔");
+    let text = text.replace("=", "↔");
     let text = text.replace("^", "⊕");
     let text = text.replace("|", "∨");
+    let text = text.replace("/", "∨");
     let text = text.replace("&", "∧");
     let text = text.replace("-", "¬");
+    let text = text.replace("!", "¬");
     text
 }
 /// removes 1 layer of unnecessary parens.
@@ -192,6 +197,18 @@ pub fn unwrap_parens(text: &str) -> Result<String, String> {
 }
 
 pub fn parse(text: &str) -> Result<Prop, ParseErr> {
+    if text.trim() == "T"{
+        return Ok(Prop::Atom(true))
+    }
+    if text.trim() == "F"{
+        return Ok(Prop::Atom(false))
+    }
+    if text.trim() == "0"{
+        return Ok(Prop::Atom(false))
+    }
+    if text.trim() == "1"{
+        return Ok(Prop::Atom(true))
+    }
     if text.is_empty(){
         return Err(ParseErr::EmptyString)
     }
@@ -217,8 +234,12 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
                             .take(tmp)
                             .map(|x: char|x.len_utf8())
                             .sum();
-            let (_, right) = text.split_at(bytes);
-            let right = right.split('¬').last().ok_or(ParseErr::Unknown)?;
+            let (left, right) = text.split_at(bytes);
+            dbg!(&text);
+            dbg!(&highest_rank);
+            dbg!(&left);
+            let right = right.split_at('¬'.len_utf8()).1;//.last().ok_or(ParseErr::Unknown)?;
+            dbg!(&right);
             return Ok(n!(parse(right)?));
         }
         PropType::Impl => {
@@ -228,11 +249,13 @@ pub fn parse(text: &str) -> Result<Prop, ParseErr> {
                             .map(|x: char|x.len_utf8())
                             .sum();
             let (left, right) = text.split_at(bytes);
-            let right = right.split('→').last().ok_or(ParseErr::Unknown)?;
+            let right = right.split_at('→'.len_utf8()).1;//.ok_or(ParseErr::Unknown)?;
             return Ok(imply!(parse(left)?, parse(right)?));
         }
         _ => {
             let mut children: Vec<Prop> = vec![];
+            dbg!(&text);
+            dbg!(&highest_rank);
             let splitted: Vec<usize> = pinpoint_associative_operators(&text, &highest_rank)?;
             if splitted.len()==0{
                 return Err(ParseErr::TokenNotFound)

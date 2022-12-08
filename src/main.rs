@@ -28,12 +28,12 @@ pub fn input<T>() -> T where T:FromStr, <T as FromStr>::Err: Debug{
 fn main() {
     // a|b|c|(x&y&z)
     //let x = disj!(v!("a"), v!("b"), v!("c"), conj!(v!("x"), v!("y"), v!("z")));
-    let j = juggler::Juggler::new(2 , 4 );
-    for i in j{
-        juggler::Juggler::print_from_vec(&i.state(), "state") 
-    }
-    let x = imply!(v!("a"),v!("b"));
-    println!("y={x}");
+    // let j = juggler::Juggler::new(2 , 4 );
+    // for i in j{
+    //     juggler::Juggler::print_from_vec(&i.state(), "state") 
+    // }
+    // let x = imply!(v!("a"),v!("b"));
+    // println!("y={x}");
 
     // // (a|b|c|x)&(a|b|c|y)&(a|b|c|z)
     // let y = conj!(
