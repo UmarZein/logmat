@@ -3,6 +3,8 @@ use crate::prop::*;
 use crate::juggler::*;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::sync::Arc;
+use std::sync::Mutex;
 // TODO: add rule: p|p&q = p
 use crate::qol_macros::*;
 
@@ -14,8 +16,9 @@ fn b(p: Prop) -> Box<Prop>{
 /// Each rule which is applied is put in a (result, rule_name) in a vec. The 
 /// may return multiple equivalent values
 
-pub fn all_simplifications(target: &Prop) -> Vec<Prop> {
+pub fn all_simplifications(target: &Prop, recurse_absorption: bool, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Vec<Prop> {
     let mut res = HashMap::<Prop,bool>::new();
+    //let cache = Arc::new(Mutex::new(HashMap::<Prop,Vec<(Prop, String)>>::new()));
     res.insert(target.clone(), false);
     let mut done = false;
     while !done{
@@ -24,11 +27,10 @@ pub fn all_simplifications(target: &Prop) -> Vec<Prop> {
         res_keys.sort_by(|a,b|a.complexity().cmp(&b.complexity())/*.reverse()*/);
         for p_done in res_keys{
             if res.get(&p_done).unwrap()==&false{
-                for (p, s) in apply_rules_raw(&p_done.clone()){
+                for (p, _) in apply_rules_raw(&p_done.clone(), cache.clone(), recurse_absorption){
                     if !res.contains_key(&p){
                         res.insert(p.clone(), false);
-                        if p.complexity() <= 2{break}
-                        let len = res.len();
+                        if p.complexity() <= 1{break}
                         done = false;
                     }
                 }
@@ -36,15 +38,54 @@ pub fn all_simplifications(target: &Prop) -> Vec<Prop> {
             }
         }
     }
+    if false{
+        println!("-----------------------------------");
+        let cache = cache.lock().unwrap();
+        for (k,v) in cache.iter(){
+            print!("{k} => [");
+            for (i,x) in v.iter().enumerate(){
+                if i>0{
+                    print!(", ")
+                }
+                print!("{}",x.0)
+            }
+            println!("]")
+        }
+        println!("-----------------------------------");
+    }
     res.keys().map(|x|x.clone()).collect()
 }
 
+const USE_CACHE: bool = true;
+const MIN_COMPLEXITY: u64 = 10;
 
-pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
+pub fn apply_rules_raw(target: &Prop, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>, recurse_absorption: bool) -> Vec<(Prop, String)> {
+    if target.complexity()>=MIN_COMPLEXITY&&USE_CACHE{
+        let read = cache.lock().unwrap();
+        if let Some(ret)= read.get(target){
+            if ret.len()==0{
+                return vec![]
+            }
+            let first = ret[0].clone();
+            let mut simplest: ((Prop, String),u64) = (first.clone(),first.0.complexity());
+            ret.iter().for_each(|x|{
+                let new_compl = x.0.complexity();
+                if new_compl < simplest.1{
+                    simplest = (x.clone(),new_compl)
+                }
+            });
+            if false{
+                println!("used cache on {target}");
+            }
+            return vec![simplest.0];
+        }
+    }
     
+    //println!("---applying rules to {target}---");
     let mut applied_results: Vec<(Prop, String)> = vec![];
 
     let mut submit = |p: Prop,s:&str|{
+        //println!("{s}");
         applied_results.push((p.clone(),s.to_owned()));
     };
     use Prop::*; 
@@ -77,14 +118,12 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                         for state in j{
                             buffer_disj.clear();
                             buffer_conj.clear();
-                            let mut k = 0;
-                            for x in state{
+                            for (i, x) in state.enumerate(){
                                 if x{
-                                    buffer_conj.push(l[k].clone());
+                                    buffer_conj.push(l[i].clone());
                                 } else {
-                                    buffer_disj.push(Not(b(l[k].clone())));
+                                    buffer_disj.push(n!(l[i].clone()));
                                 }
-                                k += 1;
                             }
                             submit(
                                 Disj(
@@ -121,14 +160,12 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                         for state in j{
                             buffer_conj.clear();
                             buffer_disj.clear();
-                            let mut k = 0;
-                            for x in state{
+                            for (i, x) in state.enumerate(){
                                 if x{
-                                    buffer_disj.push(l[k].clone());
+                                    buffer_disj.push(l[i].clone());
                                 } else {
-                                    buffer_conj.push(Not(b(l[k].clone())));
+                                    buffer_conj.push(n!(l[i].clone()));
                                 }
-                                k += 1;
                             }
                             submit(
                                 Conj
@@ -150,7 +187,7 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                 },
                 _ => ()
             };
-            let vps = apply_rules_raw(&bx.deref().clone());
+            let vps = apply_rules_raw(&bx.deref().clone(), cache.clone(), true);
             for (p, s) in vps{
                 //println!("p = {p:?}");
                 submit(Not(b(p)), s.as_str());
@@ -159,9 +196,10 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
 
         ////////////////////////// end of Not(_) /////////////////////////////// 
         
-        Conj(x) => {
-            if x.len() == 1{
-                submit(x[0].clone(), "conjunction single unwrap")
+        Conj(children) => {
+            if children.len() == 1{
+                submit(children[0].clone(), &format!("conjunction single unwrap: before = {}",target.clone()));
+                
             };
 
             // Conj([..., Conj(A...), ...]) -> Conj([..., A..., ...])
@@ -169,7 +207,7 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
             let mut has_unwrapped = false;
             let mut atomic_propositions: Vec<Prop> = vec![];
             let mut non_atomic_propositions: Vec<Prop> = vec![];
-            for i in x{
+            for i in children{
                 match i{
                     Conj(y) => {
                         let cloned = unwrapped.clone();
@@ -214,17 +252,17 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
 
             let mut all_different: Vec<Prop> = vec![];
 
-            for (i,p) in x.clone().iter().enumerate(){
-                let mut other_children: Vec<Prop> = x.clone();
+            for (i,p) in children.clone().iter().enumerate(){
+                let mut other_children: Vec<Prop> = children.clone();
                 other_children.remove(i);
-                for (p, s) in apply_rules_raw(p){
+                for (p, s) in apply_rules_raw(p, cache.clone(), true){
                     let mut complete_with_processed_children = other_children.clone();
                     complete_with_processed_children.push(p);
                     submit(Conj(complete_with_processed_children), s.as_str());
                 }
                 // p&~p&:: = f 
-                for q in x.clone(){
-                    if p.is_logically_opp(&q).unwrap(){
+                for q in children.clone(){
+                    if p.is_structurally_opp(&q){
                         submit(F, "conjunction negation law")
                     } 
                 }
@@ -241,9 +279,11 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                 }
             }
             all_different.sort();
-            let sorted_x = {let mut tmp = x.clone(); tmp.sort(); tmp};
-            if (all_different.len()>0) && (all_different!=sorted_x){
-                submit(Conj(all_different), "conjunction negation law? (p&p <=> p)");       
+            let sorted_children = {let mut tmp = children.clone(); tmp.sort(); tmp};
+            let mut idlaw = false;
+            if (all_different.len()>0) && (all_different!=sorted_children){
+                submit(Conj(all_different), "conjunction idempotent law");       
+                idlaw = true;
             }
 
             // Conj(x,y,z) = Not(Disj([Not(x),Not(y),Not(z)]))
@@ -253,19 +293,46 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
             // p∧(q∨r)≡(p∧q)∨(p∧r)
             
             // p∧(p∨q)≡p
-
+            // (p->q)=>(p&q=p)
+            // (conj!(chosen)->conj!(leftover))=>(self=conj!(chosen))
+            if !idlaw&&recurse_absorption{
+                for i in 1..children.len(){
+                    let j = Juggler::new(i as u64, children.len() as u64);
+                    let mut chosen: Vec<Prop> = vec![];
+                    let mut leftover: Vec<Prop> = vec![];
+                    for state in j{
+                        chosen.clear();
+                        leftover.clear();
+                        for (i, x) in state.enumerate(){
+                            if x{
+                                chosen.push(children[i].clone().simplify_nore_cached(cache.clone()));
+                            } else {
+                                leftover.push(children[i].clone().simplify_nore_cached(cache.clone()));
+                            }
+                        }
+                        if let Prop::Atom(true) = disj!(
+                            n!(
+                                Prop::Conj(chosen.clone()).simplify_cached(cache.clone())
+                            ).simplify_cached(cache.clone()),
+                            Prop::Conj(leftover.clone()).simplify_cached(cache.clone())
+                        ).simplify_nore_cached(cache.clone()){
+                            submit(Prop::Conj(chosen.clone()), "absorption law on conjunction")
+                        }
+                    }
+                }
+            }
             // p∧p∧:::≡p∧:::
         },
-        Disj(x) => {
-            if x.len() == 1{
-                submit(x[0].clone(), "single unwrap")
+        Disj(children) => {
+            if children.len() == 1{
+                submit(children[0].clone(), &format!("Disj single unwrap. target = {}",target.clone()))
             };
             // 1. Conj([..., Conj(A...), ...]) -> Conj([..., A..., ...])
             let mut unwrapped: Vec<Prop> = vec![];
             let mut has_unwrapped = false;
             let mut atomic_propositions: Vec<Prop> = vec![];
             let mut non_atomic_propositions: Vec<Prop> = vec![];
-            for i in x{
+            for i in children{
                 match i{
                     Disj(y) => {
                         let cloned = unwrapped.clone();
@@ -314,18 +381,18 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
             let mut all_different: Vec<Prop> = vec![];
 
             // Conj([:::])=Conj(simplifiy[:::])
-            for (i,p) in x.clone().iter().enumerate(){
-                let mut other_children: Vec<Prop> = x.clone();
+            for (i,p) in children.clone().iter().enumerate(){
+                let mut other_children: Vec<Prop> = children.clone();
                 other_children.remove(i);
-                for (p, s) in apply_rules_raw(p){
+                for (p, s) in apply_rules_raw(p, cache.clone(), true){
                     let mut complete_with_processed_children = other_children.clone();
                     complete_with_processed_children.push(p);
                     submit(Disj(complete_with_processed_children), s.as_str());
                 }
                 // p|~p&:: = t 
-                for q in x.clone(){
-                    if p.is_logically_opp(&q).unwrap(){
-                        submit(T, "disjunction negation law")
+                for q in children.clone(){
+                    if p.is_structurally_opp(&q){
+                        submit(T, &format!("disjunction negation law on {}",target.clone()))
                     }
                 }
                 
@@ -341,18 +408,48 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                 }
             }
             all_different.sort();
-            let sorted_x = {let mut tmp = x.clone(); tmp.sort(); tmp};
-            if (all_different.len()>0) && all_different!=sorted_x{
-                submit(Disj(all_different), "disjunction removed duplicates (p|p <=> p)");       
+            let sorted_children = {let mut tmp = children.clone(); tmp.sort(); tmp};
+            let mut idlaw = false;
+            if (all_different.len()>0) && all_different!=sorted_children{
+                submit(Disj(all_different), "disjunction identity laws");       
+                idlaw = true;
             }
-
+            
             // WARNING: do not uncomment. it will recurse indefinitely 
             // submit(n!(Conj(x.iter().map(|c|n!(c.clone())).collect::<Vec<Prop>>())),"de morgan");
 
+            // (p->q)=>(p|q=q)
+            // (disj!(chosen)->disj!(leftover))=>(self=disj!(leftover))
+            if !idlaw&&recurse_absorption{
+                for i in 1..children.len(){
+                    let j = Juggler::new(i as u64, children.len() as u64);
+                    let mut chosen: Vec<Prop> = vec![];
+                    let mut leftover: Vec<Prop> = vec![];
+                    for state in j{
+                        chosen.clear();
+                        leftover.clear();
+                        for (i, x) in state.enumerate(){
+                            if x{
+                                chosen.push(children[i].clone().simplify_nore_cached(cache.clone()));
+                            } else {
+                                leftover.push(children[i].clone().simplify_nore_cached(cache.clone()));
+                            }
+                        }
+                        if let Prop::Atom(true) = disj!(
+                            n!(
+                                Prop::Disj(chosen.clone()).simplify_cached(cache.clone())
+                            ).simplify_cached(cache.clone()), 
+                            Prop::Disj(leftover.clone()).simplify_cached(cache.clone())
+                        ).simplify_nore_cached(cache.clone()){
+                            submit(Prop::Disj(leftover.clone()), "absorption law on disjunction")
+                        }
+                    }
+                }
+            }
         },
         Xor(x) => {
             if x.len() == 1{
-                submit(x[0].clone(), "single unwrap")
+                submit(x[0].clone(), "xor single unwrap")
             };
             let mut new_x: Vec<Prop> = vec![];
             let mut has_done_elimination = false;
@@ -361,12 +458,12 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                 let mut has_opposite = false;
                 let mut j: usize = 0;
                 while j<new_x_clone.len(){
-                    if new_x[j].is_logically_eq(i).unwrap(){
+                    if new_x[j].is_structurally_eq(i){
                         new_x.remove(j);
                         has_opposite = true;
                         has_done_elimination = true;
                         j += 1;
-                    } else if new_x[j].is_logically_opp(i).unwrap(){
+                    } else if new_x[j].is_structurally_opp(i){
                         new_x.remove(j);
                         new_x.push(T);
                     }
@@ -383,16 +480,6 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                 x = &new_x;
                 submit(tmp,"XOR elimination");
             }
-            // F 
-            // T 
-            // T 
-            // F 
-            // (p|q)&(~p|~q)
-            // if x.len() == 2{
-            //     let p = x[0].clone();
-            //     let q = x[1].clone();
-            //     submit(conj!(disj!(p.clone(),q.clone()),disj!(n!(p),n!(q))),"xor simplification");
-            // }
             
             if x.len()>=2 {
                 let mut res: Prop;
@@ -408,49 +495,12 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
 
                         new_x = x.clone()
                     }
-                    // {
-                    //     let p = new_x.remove(i);
-                    //     let q = new_x.remove(i);
-                    //     res = conj!(disj!(p.clone(),q.clone()),disj!(n!(p),n!(q)));
-                    // };
-                    // for _ in 0..x.len()-2{
-                    //     let p = new_x.pop().unwrap();
-                    //     res = conj!(disj!(p.clone(),res.clone()),disj!(n!(p),n!(res)));
-                    // }
-                    // // println!("res = {res}");
-                    // submit(res, "xor simplification")
                 }
             }
-            // let mut unwrapped: Vec<Prop> = vec![];
-            // let mut has_unwrapped = false;
-            // for i in x{
-            //     match i{
-            //         Xor(y) => {
-            //             let cloned = unwrapped.clone();
-            //             unwrapped = [cloned, y.clone()].concat();
-            //             has_unwrapped = true;
-            //         }
-            //         _ => unwrapped.push(i.clone())
-            //     }
-            // }
-            // if has_unwrapped{
-            //     submit(Biimpl(unwrapped), "associative law (unwrap)");
-            // }
-            // // END 1.
-            // // Xor([:::])=Xor(simplifiy[:::])
-            // for (i,p) in x.clone().iter().enumerate(){
-            //     let mut other_children: Vec<Prop> = x.clone();
-            //     other_children.remove(i);
-            //     for (p, s) in apply_rules_raw(p){
-            //         let mut complete_with_processed_children = other_children.clone();
-            //         complete_with_processed_children.push(p);
-            //         submit(Xor(complete_with_processed_children), s.as_str());
-            //     }
-            // }
         },
         Biimpl(x) => {
             if x.len() == 1{
-                submit(x[0].clone(), "single unwrap")
+                submit(x[0].clone(), "Biimpl single unwrap")
             };
             // T 
             // F 
@@ -471,56 +521,38 @@ pub fn apply_rules_raw(target: &Prop) -> Vec<(Prop, String)> {
                     res = disj!(conj!(p.clone(),res.clone()),conj!(n!(p),n!(res)));
                 }
                 // println!("res = {res}");
-                submit(res, "xor simplification")
+                submit(res, "biimplication simplification")
             }
-            // let mut unwrapped: Vec<Prop> = vec![];
-            // let mut has_unwrapped = false;
-            // for i in x{
-            //     match i{
-            //         Biimpl(y) => {
-            //             let cloned = unwrapped.clone();
-            //             unwrapped = [cloned, y.clone()].concat();
-            //             has_unwrapped = true;
-            //         }
-            //         _ => unwrapped.push(i.clone())
-            //     }
-            // }
-            // if has_unwrapped{
-            //     submit(Biimpl(unwrapped), "associative law (unwrap)");
-            // }
-            // // END 1.
-            // // Xor([:::])=Xor(simplifiy[:::])
-            // for (i,p) in x.clone().iter().enumerate(){
-            //     let mut other_children: Vec<Prop> = x.clone();
-            //     other_children.remove(i);
-            //     for (p, s) in apply_rules_raw(p){
-            //         let mut complete_with_processed_children = other_children.clone();
-            //         complete_with_processed_children.push(p);
-            //         submit(Biimpl(complete_with_processed_children), s.as_str());
-            //     }
-            // }
         },
-        LogEqu(x) => (),
         
         Impl([x,y]) => {
             // p→q = ¬p∨q
-            let x_clone = (*x).deref().clone();
-            let y_clone = (*y).deref().clone();
-            submit(disj!(n!(x_clone.clone()), y_clone.clone()), "p→q into ¬p∨q...\"implication explansion\"?");
-            
-            for (p, s) in apply_rules_raw(&x_clone){
-                submit(imply!(p,y_clone.clone()),s.as_str());
+            let x = (*x).deref().clone();
+            let y = (*y).deref().clone();
+
+            if x.is_eq(&y){
+                submit(T, "implication T->T");
+            } else {
+                submit(disj!(n!(x.clone()), y.clone()), "material implication");
             }
             
-            for (p, s) in apply_rules_raw(&y_clone){
-                submit(imply!(x_clone.clone(),p),s.as_str());
-            }
+
+            // for (p, s) in apply_rules_raw(&x, true){
+            //     submit(imply!(p,y.clone()),s.as_str());
+            // }
+            // 
+            // for (p, s) in apply_rules_raw(&y, true){
+            //     submit(imply!(x.clone(),p),s.as_str());
+            // }
         },
         
         _ => (),
+    };
+
+
+    if target.complexity()>=MIN_COMPLEXITY&&USE_CACHE{
+        let mut write = cache.lock().unwrap();
+        write.insert(target.clone(), applied_results.clone());
     }
-
-
-
     return applied_results;
 }

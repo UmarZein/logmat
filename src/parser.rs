@@ -170,6 +170,7 @@ pub fn replace(text: &str) -> String {
     let text = text.replace("&", "∧");
     let text = text.replace("-", "¬");
     let text = text.replace("!", "¬");
+    let text = text.replace(" ", "");
     text
 }
 /// removes 1 layer of unnecessary parens.

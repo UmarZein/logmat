@@ -1,14 +1,19 @@
 //! Propositional types
 use crate::qol_macros::*;
 use crate::var_iter::*;
-
+use crate::rules;
 use std::ops::Deref;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::{
     cmp::Ordering,
     collections::{hash_map::DefaultHasher, HashMap},
     fmt,
     hash::{Hash, Hasher},
 };
+use std::hash::BuildHasherDefault;
+use twox_hash::XxHash64;
+
 /// PropType
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum PropType {
@@ -20,7 +25,6 @@ pub enum PropType {
     Disj,
     Biimpl,
     Xor,
-    LogEqu,
     Impl,
 }
 
@@ -40,7 +44,6 @@ impl PropType{
             Disj => true,
             Biimpl => true,
             Xor => true,
-            LogEqu => true,
             _ => false
         }
     }
@@ -66,7 +69,6 @@ impl PropType{
             PropType::Disj => Some(Disj(f)),
             PropType::Biimpl => Some(Biimpl(f)),
             PropType::Xor => Some(Xor(f)),
-            //PropType::LogEqu => Some(LogEqu(f)),
             _ => None
         }
     }
@@ -90,7 +92,6 @@ pub enum Prop {
     Disj(Vec<Prop>),
     Biimpl(Vec<Prop>),
     Xor(Vec<Prop>),
-    LogEqu(Vec<Prop>),
 
     Impl([Box<Prop>; 2]),
 }
@@ -105,25 +106,63 @@ impl Prop {
     pub fn complexity(&self) -> u64 {
         use Prop::*;
         match self {
-            Atom(_) => 0,
-            Var(_) => 1,
+            Atom(_) => 1,
+            Var(_) => 2,
             Scope(bp) => bp.complexity(),
-            Not(bp) => 1 + 2 * bp.complexity(),
+            Not(bp) => 1+bp.complexity(),
             Conj(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>(),
             Disj(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>(),
 
-            Biimpl(vp) => vp.len() as u64 + (vp.iter().map(|p| p.complexity()).sum::<u64>()) * 2,
-            Xor(vp) => vp.len() as u64 + vp.iter().map(|p| p.complexity()).sum::<u64>() * 2,
+            Biimpl(vp) => (vp.iter().map(|p| p.complexity()).sum::<u64>()) * 2,
+            Xor(vp) => vp.iter().map(|p| p.complexity()).sum::<u64>() * 2,
 
-            LogEqu(vp) => 1 + 2 * vp.iter().map(|p| p.complexity()).sum::<u64>(),
 
             Impl(bp2) => {
                 let x = bp2[0].clone();
                 let y = bp2[1].clone();
-                1 + disj!(n!(x.deref().clone()), y.deref().clone()).complexity()
+                disj!(n!(x.deref().clone()), y.deref().clone()).complexity()+2
             }
         }
     }
+    
+    pub fn simplify(&self) -> Prop{
+        let cache = Arc::new(Mutex::new(HashMap::<Prop,Vec<(Prop, String)>>::new()));
+        return self.simplify_cached(cache)  
+    } 
+    
+    pub fn simplify_nore(&self) -> Prop{
+        let cache = Arc::new(Mutex::new(HashMap::<Prop,Vec<(Prop, String)>>::new()));
+        return self.simplify_nore_cached(cache)  
+    } 
+
+    pub fn simplify_cached(&self, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Prop{
+        let mut ret = self.clone();
+        for i in rules::all_simplifications(self, true, cache.clone()) {
+            if i.complexity()<ret.complexity(){
+                ret = i
+            }
+        }
+        ret
+    }
+
+    pub fn simplify_nore_cached(&self, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Prop{
+        let mut ret = self.clone();
+        for i in rules::all_simplifications(self, false, cache.clone()) {
+            if i.complexity()<ret.complexity(){
+                ret = i
+            }
+        }
+        ret
+    }
+
+    pub fn is_eq(&self, other: &Prop) -> bool{
+        return self.simplify().is_structurally_eq(&other.simplify())
+    }
+    
+    pub fn is_opp(&self, other: &Prop) -> bool{
+        return self.simplify().is_structurally_opp(&other.simplify())
+    }
+
     pub fn is_structurally_eq(&self, p2: &Prop) -> bool {
         let hasher = DefaultHasher::default();
         let mut h1 = hasher.clone();
@@ -131,6 +170,27 @@ impl Prop {
         self.hash(&mut h1);
         p2.hash(&mut h2);
         return h1.finish() == h2.finish();
+    }
+
+    pub fn is_structurally_opp(&self, p2: &Prop) -> bool{
+        if let Prop::Atom(child_self) = self{
+            if let Prop::Atom(child_p2) = p2{
+                return child_self!=child_p2
+            }
+        }
+        if let Prop::Not(child) = self{
+            let child = *child.clone();
+            if child.is_structurally_eq(p2){
+                return true
+            }
+        }
+        if let Prop::Not(child) = p2{
+            let child = *child.clone();
+            if child.is_structurally_eq(self){
+                return true
+            }
+        }
+        false
     }
 
     pub fn all_iotta(&self) -> Result<Vec<bool>, String> {
@@ -226,9 +286,6 @@ impl Prop {
                 }
                 Ok(!ret)
             }
-            LogEqu(_) => Err(String::from(
-                "can not evaluate logical equivalence operator",
-            )),
 
             Impl([x, y]) => {
                 if x.evaluate()? == true {
@@ -266,11 +323,6 @@ impl Prop {
                 }
             }
             Biimpl(x) => {
-                for i in x {
-                    res = [res, i.get_vars()].concat()
-                }
-            }
-            LogEqu(x) => {
                 for i in x {
                     res = [res, i.get_vars()].concat()
                 }
@@ -339,14 +391,6 @@ impl Prop {
                 }
                 x2
             }),
-            LogEqu(x) => LogEqu({
-                let mut x2 = vec![];
-                for i in x {
-                    x2.push(i.swap(v))
-                }
-                x2
-            }),
-
             Impl([x, y]) => Impl([Box::<Prop>::new(x.swap(v)), Box::<Prop>::new(y.swap(v))]),
         }
     }
@@ -553,18 +597,6 @@ impl Hash for Prop {
                 children_hash.hash(state);
                 PU::Xor.hash(state);
             }
-            LogEqu(vp) => {
-                let tmp = DefaultHasher::new();
-                let vpc = (*vp).clone();
-                let mut children_hash: u64 = 0;
-                vpc.iter().for_each(|x| {
-                    let mut tmp = tmp.clone();
-                    x.hash(&mut tmp);
-                    children_hash ^= tmp.finish()
-                });
-                children_hash.hash(state);
-                PU::LogEqu.hash(state);
-            }
 
             Impl(bp2) => {
                 PU::Impl.hash(state);
@@ -604,7 +636,6 @@ impl fmt::Display for Prop {
                 Xor(_) => 4,
                 Impl(_) => 5,
                 Biimpl(_) => 6,
-                LogEqu(_) => 7,
                 _ => u8::MAX,
             }
         }
@@ -642,7 +673,6 @@ impl fmt::Display for Prop {
                 Disj(pv) => impl_box_pv_d(pv, "∨"),
                 Xor(pv) => impl_box_pv_d(pv, "⊕"),
                 Biimpl(pv) => impl_box_pv_d(pv, "↔"),
-                LogEqu(pv) => impl_box_pv_d(pv, "≡"),
 
                 Impl([p1, p2]) => impl_box_pv_d(vec![*p1, *p2], "→"),
                 // _ => String::from("_")

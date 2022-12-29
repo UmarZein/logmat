@@ -55,14 +55,6 @@ macro_rules! xor {
     }};
 }
 
-#[macro_export]
-macro_rules! logequ {
-    ($( $child: expr ),*) => {{
-        let mut children: Vec<Prop> = vec![];
-        $( children.push($child); )*
-        Prop::LogEqu(children)
-    }};
-}
 
 #[macro_export]
 macro_rules! imply {
@@ -71,4 +63,4 @@ macro_rules! imply {
     };
 }
 #[allow(unused_imports)]
-pub(crate) use {v,n,conj,disj,xor,biimpl,logequ,imply};
+pub(crate) use {v,n,conj,disj,xor,biimpl,imply};
