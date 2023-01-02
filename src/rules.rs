@@ -12,11 +12,17 @@ fn b(p: Prop) -> Box<Prop>{
     Box::<Prop>::new(p)
 }
 
+/// thread-safe hashmap cache
+pub type TCache<K,V> = Arc<Mutex<HashMap<K,V>>>;
+
+/// simplifier cache
+pub type SCache = TCache<Prop, Vec<(Prop, String)>>;
+
 /// apply logical rules. 
 /// Each rule which is applied is put in a (result, rule_name) in a vec. The 
 /// may return multiple equivalent values
 
-pub fn all_simplifications(target: &Prop, recurse_absorption: bool, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Vec<Prop> {
+pub fn all_simplifications(target: &Prop, recurse_absorption: bool, cache: SCache) -> Vec<Prop> {
     let mut res = HashMap::<Prop,bool>::new();
     //let cache = Arc::new(Mutex::new(HashMap::<Prop,Vec<(Prop, String)>>::new()));
     res.insert(target.clone(), false);
@@ -59,7 +65,7 @@ pub fn all_simplifications(target: &Prop, recurse_absorption: bool, cache: Arc<M
 const USE_CACHE: bool = true;
 const MIN_COMPLEXITY: u64 = 10;
 
-pub fn apply_rules_raw(target: &Prop, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>, recurse_absorption: bool) -> Vec<(Prop, String)> {
+pub fn apply_rules_raw(target: &Prop, cache: SCache, recurse_absorption: bool) -> Vec<(Prop, String)> {
     if target.complexity()>=MIN_COMPLEXITY&&USE_CACHE{
         let read = cache.lock().unwrap();
         if let Some(ret)= read.get(target){

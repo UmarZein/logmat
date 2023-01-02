@@ -17,6 +17,9 @@ use prop::Prop::{self, *};
 
 use crate::rules::all_simplifications;
 
+fn foo(){
+    1==2;
+}
 
 pub fn input<T>() -> T where T:FromStr, <T as FromStr>::Err: Debug{
     let mut s: String = "".into();

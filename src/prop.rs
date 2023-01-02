@@ -1,7 +1,7 @@
 //! Propositional types
 use crate::qol_macros::*;
 use crate::var_iter::*;
-use crate::rules;
+use crate::rules::{self,SCache};
 use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -11,6 +11,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
 };
+
 use std::hash::BuildHasherDefault;
 use twox_hash::XxHash64;
 
@@ -135,7 +136,7 @@ impl Prop {
         return self.simplify_nore_cached(cache)  
     } 
 
-    pub fn simplify_cached(&self, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Prop{
+    pub fn simplify_cached(&self, cache: SCache) -> Prop{
         let mut ret = self.clone();
         for i in rules::all_simplifications(self, true, cache.clone()) {
             if i.complexity()<ret.complexity(){
@@ -145,7 +146,7 @@ impl Prop {
         ret
     }
 
-    pub fn simplify_nore_cached(&self, cache: Arc<Mutex<HashMap<Prop,Vec<(Prop, String)>>>>) -> Prop{
+    pub fn simplify_nore_cached(&self, cache: SCache) -> Prop{
         let mut ret = self.clone();
         for i in rules::all_simplifications(self, false, cache.clone()) {
             if i.complexity()<ret.complexity(){
